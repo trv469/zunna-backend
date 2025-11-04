@@ -32,6 +32,8 @@ app.post("/api/paypal/cancel", async (req, res) => {
 });
 
 // Webhook listener (PayPal no requiere CORS aquí)
+// ⚠️ Usa raw body para no alterar el contenido que firma PayPal
+app.use("/api/webhook/paypal", express.raw({ type: "application/json" }));
 app.use("/api/paypal/webhook", webhookRouter);
 
 app.listen(process.env.PORT, () => {

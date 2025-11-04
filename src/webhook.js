@@ -1,24 +1,80 @@
 import express from "express";
-import { verifyWebhookSignature } from "./paypal.js";
+import axios from "axios";
 
 const router = express.Router();
 
+const PAYPAL_CLIENT_ID = process.env.PAYPAL_CLIENT_ID;
+const PAYPAL_SECRET = process.env.PAYPAL_SECRET;
+const PAYPAL_WEBHOOK_ID = process.env.PAYPAL_WEBHOOK_ID; // el ID que ves en tu app en PayPal
+const PAYPAL_API = process.env.PAYPAL_API || "https://api-m.paypal.com";
+
+// 🔑 Obtener token de acceso PayPal
+async function getAccessToken() {
+  const { data } = await axios.post(
+    `${PAYPAL_API}/v1/oauth2/token`,
+    "grant_type=client_credentials",
+    {
+      auth: {
+        username: PAYPAL_CLIENT_ID,
+        password: PAYPAL_SECRET,
+      },
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+    }
+  );
+  return data.access_token;
+}
+
+// ✅ Verificar firma del webhook
+async function verifyWebhookSignature(headers, body) {
+  try {
+    const accessToken = await getAccessToken();
+
+    const payload = {
+      auth_algo: headers["paypal-auth-algo"],
+      cert_url: headers["paypal-cert-url"],
+      transmission_id: headers["paypal-transmission-id"],
+      transmission_sig: headers["paypal-transmission-sig"],
+      transmission_time: headers["paypal-transmission-time"],
+      webhook_id: PAYPAL_WEBHOOK_ID,
+      webhook_event: JSON.parse(body.toString()), // 👈 body en raw buffer
+    };
+
+    const { data } = await axios.post(
+      `${PAYPAL_API}/v1/notifications/verify-webhook-signature`,
+      payload,
+      {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }
+    );
+
+    return data.verification_status === "SUCCESS";
+  } catch (err) {
+    console.error("❌ Error verificando webhook:", err.response?.data || err);
+    return false;
+  }
+}
+
+// 🚀 Ruta principal del webhook
 router.post("/", async (req, res) => {
   const headers = req.headers;
-  const body = req.body;
+  const rawBody = req.body; // viene como Buffer
 
-  const isValid = await verifyWebhookSignature(headers, body);
+  const isValid = await verifyWebhookSignature(headers, rawBody);
   if (!isValid) {
     console.warn("⚠️ Webhook no verificado");
     return res.sendStatus(400);
   }
 
-  const event = body;
+  const event = JSON.parse(rawBody.toString());
   console.log("📩 Evento recibido:", event.event_type);
 
   switch (event.event_type) {
     case "BILLING.SUBSCRIPTION.CANCELLED":
-      // Aquí actualizarías tu BD
       console.log(`❌ Suscripción ${event.resource.id} cancelada`);
       break;
     case "BILLING.SUBSCRIPTION.ACTIVATED":
