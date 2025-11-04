@@ -52,6 +52,7 @@ async function verifyWebhookSignature(headers, body) {
         },
       }
     );
+    console.log("🚀 ~ verifyWebhookSignature ~ data:", data)
 
     return data.verification_status === "SUCCESS";
   } catch (err) {
