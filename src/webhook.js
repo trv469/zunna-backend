@@ -28,6 +28,7 @@ async function getAccessToken() {
 
 // ✅ Verificar firma del webhook
 async function verifyWebhookSignature(headers, body) {
+  console.log("🚀 ~ verifyWebhookSignature ~ body:", body)
   try {
     const accessToken = await getAccessToken();
 
