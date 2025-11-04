@@ -65,14 +65,15 @@ async function verifyWebhookSignature(headers, body) {
 router.post("/", async (req, res) => {
   const headers = req.headers;
   const rawBody = req.body; // viene como Buffer
+  console.log("🚀 ~ rawBody:", rawBody)
 
   const isValid = await verifyWebhookSignature(headers, rawBody);
   if (!isValid) {
     console.warn("⚠️ Webhook no verificado");
-    return res.sendStatus(400);
+    return res.send({ error: "Webhook no verificado" }).sendStatus(400);
   }
 
-  const event = JSON.parse(rawBody.toString());
+  const event = rawBody;
   console.log("📩 Evento recibido:", event.event_type);
 
   switch (event.event_type) {
