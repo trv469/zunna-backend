@@ -33,7 +33,7 @@ app.post("/api/paypal/cancel", async (req, res) => {
 
 // Webhook listener (PayPal no requiere CORS aquí)
 // ⚠️ Usa raw body para no alterar el contenido que firma PayPal
-app.use("/api/webhook/paypal", express.raw({ type: "application/json" }), webhookRouter);
+app.use("/api/webhook/paypal", webhookRouter);
 
 app.listen(process.env.PORT, () => {
   console.log(`🚀 Servidor escuchando en http://localhost:${process.env.PORT}`);

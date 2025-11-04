@@ -39,7 +39,7 @@ async function verifyWebhookSignature(headers, body) {
       transmission_sig: headers["paypal-transmission-sig"],
       transmission_time: headers["paypal-transmission-time"],
       webhook_id: PAYPAL_WEBHOOK_ID,
-      webhook_event: JSON.parse(body.toString()), // 👈 body en raw buffer
+      webhook_event: body,
     };
 
     const { data } = await axios.post(
