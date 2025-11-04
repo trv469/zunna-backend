@@ -1,67 +1,59 @@
-import fetch from "node-fetch";
+import axios from "axios";
 import dotenv from "dotenv";
 dotenv.config();
 
 const { PAYPAL_CLIENT_ID, PAYPAL_SECRET, PAYPAL_API } = process.env;
 
+// 🧩 Obtener token de acceso
 export async function getAccessToken() {
-  const auth = Buffer.from(`${PAYPAL_CLIENT_ID}:${PAYPAL_SECRET}`).toString(
-    "base64"
-  );
+  const auth = Buffer.from(`${PAYPAL_CLIENT_ID}:${PAYPAL_SECRET}`).toString("base64");
 
-  const res = await fetch(`${PAYPAL_API}/v1/oauth2/token`, {
-    method: "POST",
-    headers: {
-      Authorization: `Basic ${auth}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: "grant_type=client_credentials",
-  });
-
-  const data = await res.json();
-  return data.access_token;
-}
-
-export async function cancelSubscription(
-  subscriptionId,
-  reason = "User requested cancellation"
-) {
-  const token = await getAccessToken();
-
-  const res = await fetch(
-    `${PAYPAL_API}/v1/billing/subscriptions/${subscriptionId}/cancel`,
+  const res = await axios.post(
+    `${PAYPAL_API}/v1/oauth2/token`,
+    "grant_type=client_credentials",
     {
-      method: "POST",
       headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
+        Authorization: `Basic ${auth}`,
+        "Content-Type": "application/x-www-form-urlencoded",
       },
-      body: JSON.stringify({ reason }),
     }
   );
 
-  if (res.status === 204) {
+  return res.data.access_token;
+}
+
+// ❌ Cancelar suscripción
+export async function cancelSubscription(subscriptionId, reason = "User requested cancellation") {
+  const token = await getAccessToken();
+
+  try {
+    await axios.post(
+      `${PAYPAL_API}/v1/billing/subscriptions/${subscriptionId}/cancel`,
+      { reason },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
     console.log(`✅ Suscripción ${subscriptionId} cancelada`);
     return true;
-  } else {
-    const err = await res.text();
-    console.error("❌ Error al cancelar:", err);
+  } catch (err) {
+    console.error("❌ Error al cancelar:", err.response?.data || err.message);
     return false;
   }
 }
 
+// 🔒 Verificar firma del webhook
 export async function verifyWebhookSignature(headers, body) {
   const token = await getAccessToken();
 
-  const res = await fetch(
-    `${PAYPAL_API}/v1/notifications/verify-webhook-signature`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
+  try {
+    const res = await axios.post(
+      `${PAYPAL_API}/v1/notifications/verify-webhook-signature`,
+      {
         auth_algo: headers["paypal-auth-algo"],
         cert_url: headers["paypal-cert-url"],
         transmission_id: headers["paypal-transmission-id"],
@@ -69,10 +61,18 @@ export async function verifyWebhookSignature(headers, body) {
         transmission_time: headers["paypal-transmission-time"],
         webhook_id: process.env.WEBHOOK_ID,
         webhook_event: body,
-      }),
-    }
-  );
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
 
-  const data = await res.json();
-  return data.verification_status === "SUCCESS";
+    return res.data.verification_status === "SUCCESS";
+  } catch (err) {
+    console.error("⚠️ Error verificando webhook:", err.response?.data || err.message);
+    return false;
+  }
 }
