@@ -6,25 +6,38 @@ const { PAYPAL_CLIENT_ID, PAYPAL_SECRET, PAYPAL_API } = process.env;
 
 // 🧩 Obtener token de acceso
 export async function getAccessToken() {
-  const auth = Buffer.from(`${PAYPAL_CLIENT_ID}:${PAYPAL_SECRET}`).toString("base64");
+  try {
+    let data = {
+      grant_type: "client_credentials",
+    };
 
-  const res = await axios.post(
-    `${PAYPAL_API}/v1/oauth2/token`,
-    "grant_type=client_credentials",
-    {
+    let config = {
+      method: "post",
+      maxBodyLength: Infinity,
+      url: `${PAYPAL_API}/v1/oauth2/token`,
       headers: {
-        Authorization: `Basic ${auth}`,
         "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Basic ${Buffer.from(`${PAYPAL_CLIENT_ID}:${PAYPAL_SECRET}`).toString("base64")}`,
       },
-    }
-  );
+      data: data,
+    };
 
-  return res.data.access_token;
+    const res = await axios.post(config.url, data, { headers: config.headers, maxBodyLength: config.maxBodyLength });
+
+    return res.data.access_token;
+  } catch (error) {
+    console.error("❌ Error al obtener token de acceso:", error);
+    throw error;
+  }
 }
 
 // ❌ Cancelar suscripción
-export async function cancelSubscription(subscriptionId, reason = "User requested cancellation") {
+export async function cancelSubscription(
+  subscriptionId,
+  reason = "User requested cancellation"
+) {
   const token = await getAccessToken();
+  console.log("🚀 ~ cancelSubscription ~ token:", token);
 
   try {
     await axios.post(
@@ -72,7 +85,10 @@ export async function verifyWebhookSignature(headers, body) {
 
     return res.data.verification_status === "SUCCESS";
   } catch (err) {
-    console.error("⚠️ Error verificando webhook:", err.response?.data || err.message);
+    console.error(
+      "⚠️ Error verificando webhook:",
+      err.response?.data || err.message
+    );
     return false;
   }
 }

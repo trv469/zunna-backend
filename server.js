@@ -22,7 +22,7 @@ app.use(express.json());
 
 // Endpoint para cancelar suscripción
 app.post("/api/paypal/cancel", async (req, res) => {
-  const { subscriptionId } = req.body;
+  const { subscriptionId } = req?.body;
 
   if (!subscriptionId)
     return res.status(400).json({ error: "subscriptionId requerido" });
