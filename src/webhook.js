@@ -1,5 +1,6 @@
 import express from "express";
 import axios from "axios";
+import { db } from "./../firebase.js";
 
 const router = express.Router();
 
@@ -28,7 +29,7 @@ async function getAccessToken() {
 
 // ✅ Verificar firma del webhook
 async function verifyWebhookSignature(headers, body) {
-  console.log("🚀 ~ verifyWebhookSignature ~ body:", body)
+  console.log("🚀 ~ verifyWebhookSignature ~ body:", body);
   try {
     const accessToken = await getAccessToken();
 
@@ -52,7 +53,7 @@ async function verifyWebhookSignature(headers, body) {
         },
       }
     );
-    console.log("🚀 ~ verifyWebhookSignature ~ data:", data)
+    console.log("🚀 ~ verifyWebhookSignature ~ data:", data);
 
     return data.verification_status === "SUCCESS";
   } catch (err) {
@@ -65,26 +66,27 @@ async function verifyWebhookSignature(headers, body) {
 router.post("/", async (req, res) => {
   const headers = req.headers;
   const rawBody = req.body; // viene como Buffer
-  console.log("🚀 ~ rawBody:", rawBody)
+  console.log("🚀 ~ rawBody:", rawBody);
 
   const isValid = await verifyWebhookSignature(headers, rawBody);
   if (!isValid) {
-    console.warn("⚠️ Webhook no verificado");
     return res.send({ error: "Webhook no verificado" }).sendStatus(400);
   }
 
   const event = rawBody;
-  console.log("📩 Evento recibido:", event.event_type);
 
   switch (event.event_type) {
     case "BILLING.SUBSCRIPTION.CANCELLED":
       console.log(`❌ Suscripción ${event.resource.id} cancelada`);
+      await deactivateUserPlan(event.resource.id);
       break;
     case "BILLING.SUBSCRIPTION.ACTIVATED":
       console.log(`✅ Suscripción ${event.resource.id} activada`);
+      await activateUserPlan(event.resource.id);
       break;
     case "BILLING.SUBSCRIPTION.EXPIRED":
       console.log(`⏰ Suscripción ${event.resource.id} expirada`);
+      await deactivateUserPlan(event.resource.id);
       break;
     default:
       console.log("Evento no manejado:", event.event_type);
@@ -92,5 +94,61 @@ router.post("/", async (req, res) => {
 
   res.sendStatus(200);
 });
+
+async function deactivateUserPlan(subscriptionId) {
+  try {
+    const snapshot = await db
+      .collection("users")
+      .where("plan.paypalData.subscriptionID", "==", subscriptionId)
+      .limit(1)
+      .get();
+
+    if (snapshot.empty) {
+      console.warn("Usuario no encontrado para esa suscripción");
+      return;
+    }
+
+    const userDoc = snapshot.docs[0].ref;
+
+    await userDoc.update({
+      "plan.planId": "free",
+      "plan.endDate": new Date(),
+      "plan.cancelReason": "subscription_cancelled",
+    });
+
+    console.log(`🛑 Usuario ${userDoc.id} desactivado correctamente`);
+  } catch (err) {
+    console.error("Error actualizando Firestore:", err);
+  }
+}
+async function activateUserPlan(subscriptionId) {
+  try {
+    const snapshot = await db
+      .collection("users")
+      .where("plan.paypalData.subscriptionID", "==", subscriptionId)
+      .limit(1)
+      .get();
+
+    if (snapshot.empty) {
+      console.warn(
+        `⚠️ No se encontró usuario con subscriptionID: ${subscriptionId}`
+      );
+      return;
+    }
+
+    const userDoc = snapshot.docs[0].ref;
+
+    await userDoc.update({
+      "plan.planId": "premium",
+      "plan.cancelReason": null,
+      "plan.startDate": new Date(),
+      "plan.invoicedDay": new Date().getDate(),
+    });
+
+    console.log(`🚀 Plan activado para usuario ${userDoc.id}`);
+  } catch (err) {
+    console.error("🔥 Error al actualizar Firestore:", err);
+  }
+}
 
 export default router;
