@@ -111,9 +111,11 @@ async function deactivateUserPlan(subscriptionId) {
     const userDoc = snapshot.docs[0].ref;
 
     await userDoc.update({
-      "plan.planId": "free",
+      "plan.planId": "trial",
       "plan.endDate": new Date(),
       "plan.cancelReason": "subscription_cancelled",
+      "plan.trialPeriod":false,
+      "plan.cancelledAt": new Date()
     });
 
     console.log(`🛑 Usuario ${userDoc.id} desactivado correctamente`);
